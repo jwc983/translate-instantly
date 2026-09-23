@@ -38,9 +38,12 @@ Chinese using Gemini or DeepSeek.
 1. Select any English or Chinese text in any app.
 2. Press **⌥⇧T** (Option+Shift+T).
 3. A popup appears near your cursor:
-   - English selection → a plain-English rewrite of the text, followed by
-     its Simplified Chinese translation.
+   - English selection → a plain-English rewrite, a General American IPA
+     transcription of the original text, and its Simplified Chinese translation.
    - Chinese selection → its English translation.
+   - Click **▶ Play** next to a section title (including your selected text)
+     to hear it read aloud (click **■ Stop** to stop). For the most natural voice, download a Premium or
+     Enhanced voice in System Settings › Accessibility › Spoken Content.
 
    The direction is picked automatically based on which script the
    selected text is mostly written in.
