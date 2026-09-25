@@ -3,8 +3,6 @@ import ApplicationServices
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
-    private var geminiProviderItem: NSMenuItem?
-    private var deepseekProviderItem: NSMenuItem?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         DebugLog.log("applicationWillFinishLaunching")
@@ -46,13 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
-        menu.addItem(withTitle: "Set Gemini API Key…", action: #selector(setGeminiAPIKey), keyEquivalent: "")
         menu.addItem(withTitle: "Set DeepSeek API Key…", action: #selector(setDeepSeekAPIKey), keyEquivalent: "")
-        menu.addItem(.separator())
-        let geminiItem = menu.addItem(withTitle: "Use Gemini", action: #selector(selectGemini), keyEquivalent: "")
-        let deepseekItem = menu.addItem(withTitle: "Use DeepSeek", action: #selector(selectDeepSeek), keyEquivalent: "")
-        geminiProviderItem = geminiItem
-        deepseekProviderItem = deepseekItem
         menu.addItem(.separator())
         let hotkeyItem = NSMenuItem(title: "Hotkey: ⌥⇧T", action: nil, keyEquivalent: "")
         hotkeyItem.isEnabled = false
@@ -63,23 +55,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.menu = menu
 
         statusItem = item
-        updateProviderMenuState()
-    }
-
-    private func updateProviderMenuState() {
-        let active = TranslationProvider.active
-        geminiProviderItem?.state = active == .gemini ? .on : .off
-        deepseekProviderItem?.state = active == .deepseek ? .on : .off
-    }
-
-    @objc private func selectGemini() {
-        TranslationProvider.active = .gemini
-        updateProviderMenuState()
-    }
-
-    @objc private func selectDeepSeek() {
-        TranslationProvider.active = .deepseek
-        updateProviderMenuState()
     }
 
     private func setupHotKey() {
@@ -91,12 +66,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func translateSelection() {
         DebugLog.log("translateSelection triggered, AXIsProcessTrusted=\(AXIsProcessTrusted())")
-        let provider = TranslationProvider.active
-        guard let apiKey = APIKeyStore.load(for: provider), !apiKey.isEmpty else {
-            DebugLog.log("no API key set for \(provider.rawValue)")
+        guard let apiKey = APIKeyStore.load(), !apiKey.isEmpty else {
+            DebugLog.log("no DeepSeek API key set")
             let alert = NSAlert()
-            alert.messageText = "\(provider.displayName) API Key Required"
-            alert.informativeText = "Set your \(provider.displayName) API key from the menu bar icon first."
+            alert.messageText = "DeepSeek API Key Required"
+            alert.informativeText = "Set your DeepSeek API key from the menu bar icon first."
             alert.runModal()
             return
         }
@@ -122,42 +96,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
 
-            switch provider {
-            case .gemini:
-                GeminiClient.translate(text, apiKey: apiKey, completion: handleResult)
-            case .deepseek:
-                DeepSeekClient.translate(text, apiKey: apiKey, completion: handleResult)
-            }
-        }
-    }
-
-    @objc private func setGeminiAPIKey() {
-        // Presenting a modal alert synchronously inside a status-item menu action
-        // leaves it unable to receive keyboard/paste input until the menu's own
-        // tracking session has fully ended, so defer to the next run loop turn.
-        DispatchQueue.main.async { [weak self] in
-            self?.presentAPIKeyAlert(for: .gemini, placeholder: "AIza…")
+            DeepSeekClient.translate(text, apiKey: apiKey, completion: handleResult)
         }
     }
 
     @objc private func setDeepSeekAPIKey() {
+        // Presenting a modal alert synchronously inside a status-item menu action
+        // leaves it unable to receive keyboard/paste input until the menu's own
+        // tracking session has fully ended, so defer to the next run loop turn.
         DispatchQueue.main.async { [weak self] in
-            self?.presentAPIKeyAlert(for: .deepseek, placeholder: "sk-…")
+            self?.presentAPIKeyAlert()
         }
     }
 
-    private func presentAPIKeyAlert(for provider: TranslationProvider, placeholder: String) {
+    private func presentAPIKeyAlert() {
         NSApp.activate(ignoringOtherApps: true)
 
         let alert = NSAlert()
-        alert.messageText = "\(provider.displayName) API Key"
-        alert.informativeText = "Enter your \(provider.displayName) API key."
+        alert.messageText = "DeepSeek API Key"
+        alert.informativeText = "Enter your DeepSeek API key."
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
 
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
-        field.stringValue = APIKeyStore.load(for: provider) ?? ""
-        field.placeholderString = placeholder
+        field.stringValue = APIKeyStore.load() ?? ""
+        field.placeholderString = "sk-…"
         alert.accessoryView = field
         alert.window.initialFirstResponder = field
 
@@ -165,7 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.window.makeFirstResponder(field)
 
         if alert.runModal() == .alertFirstButtonReturn {
-            APIKeyStore.save(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines), for: provider)
+            APIKeyStore.save(field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines), )
         }
     }
 

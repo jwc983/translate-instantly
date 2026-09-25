@@ -1,13 +1,11 @@
 # TranslateInstantly
 
 A macOS menu-bar app that translates selected text between English and
-Chinese using Gemini or DeepSeek.
+Chinese using DeepSeek.
 
 ## Setup
 
-1. Get an API key for whichever provider you want to use:
-   [Gemini](https://aistudio.google.com/apikey) and/or
-   [DeepSeek](https://platform.deepseek.com/api_keys).
+1. Get a [DeepSeek API key](https://platform.deepseek.com/api_keys).
 
 2. Build the app:
 
@@ -25,13 +23,8 @@ Chinese using Gemini or DeepSeek.
    (System Settings → Privacy & Security → Accessibility → enable TranslateInstantly).
    This is required so the app can read your text selection.
 
-5. Click the "译" icon in the menu bar → **Set Gemini API Key…** and/or
-   **Set DeepSeek API Key…**, and paste the corresponding key. Keys are stored
-   securely in the macOS Keychain, one per provider.
-
-6. Pick the active provider from the menu bar: **Use Gemini** or
-   **Use DeepSeek** (checkmark shows which is active). The choice is
-   remembered between launches.
+5. Click the "译" icon in the menu bar → **Set DeepSeek API Key…**, and paste
+   your key. It is stored securely in the macOS Keychain.
 
 ## Usage
 
