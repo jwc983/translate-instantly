@@ -41,11 +41,12 @@ enum TranslationPromptBuilder {
     private static let plainEnglishMarker = "PLAIN ENGLISH:"
     private static let ipaMarker = "IPA:"
     private static let chineseMarker = "CHINESE:"
+    private static let grammarMarker = "GRAMMAR:"
     private static let englishMarker = "ENGLISH:"
 
     private static let englishToChineseInstructions = """
     You are a translation assistant. The user selected a piece of English text.
-    Respond with exactly three labeled sections, in this order, and nothing else:
+    Respond with exactly four labeled sections, in this order, and nothing else:
 
     \(plainEnglishMarker)
     Rewrite the text in plain, simple English: easy vocabulary, short sentences, same meaning.
@@ -55,6 +56,9 @@ enum TranslationPromptBuilder {
 
     \(chineseMarker)
     A natural Simplified Chinese translation of the original text.
+
+    \(grammarMarker)
+    Explain the key grammar of the original text simply, for an English learner, in plain, simple English. Use 2 to 4 short bullet points, each starting with "• ". Name each grammar point (for example present perfect or relative clause) and quote the words it applies to. Skip anything too basic to be worth noting. If the text is a single word, give its part of speech and one common usage instead.
     """
 
     private static let chineseToEnglishInstructions = """
@@ -82,24 +86,20 @@ enum TranslationPromptBuilder {
 
         switch direction {
         case .englishToChinese:
-            guard let chineseRange = trimmed.range(of: chineseMarker, options: .caseInsensitive) else {
+            guard trimmed.range(of: chineseMarker, options: .caseInsensitive) != nil else {
                 return TranslationResult(sections: [.init(title: "中文", body: trimmed, speechLanguage: "zh-CN")])
             }
 
-            let beforeChinese = String(trimmed[trimmed.startIndex..<chineseRange.lowerBound])
-            let ipaRange = beforeChinese.range(of: ipaMarker, options: .caseInsensitive)
-
-            var plainEnglishSection = ipaRange.map { String(beforeChinese[beforeChinese.startIndex..<$0.lowerBound]) } ?? beforeChinese
-            if let markerRange = plainEnglishSection.range(of: plainEnglishMarker, options: .caseInsensitive) {
-                plainEnglishSection = String(plainEnglishSection[markerRange.upperBound...])
-            }
-            let ipaSection = ipaRange.map { String(beforeChinese[$0.upperBound...]) } ?? ""
-            let chineseSection = String(trimmed[chineseRange.upperBound...])
+            let bodies = splitSections(trimmed, markers: [plainEnglishMarker, ipaMarker, chineseMarker, grammarMarker])
+            // Text before the first marker is treated as the plain-English
+            // rewrite when the model leaves off its label.
+            let plainEnglish = bodies[plainEnglishMarker] ?? bodies[""] ?? ""
 
             return TranslationResult(sections: [
-                .init(title: "PLAIN ENGLISH", body: plainEnglishSection.trimmingCharacters(in: .whitespacesAndNewlines), speechLanguage: "en-US"),
-                .init(title: "IPA", body: ipaSection.trimmingCharacters(in: .whitespacesAndNewlines)),
-                .init(title: "中文", body: chineseSection.trimmingCharacters(in: .whitespacesAndNewlines), speechLanguage: "zh-CN")
+                .init(title: "PLAIN ENGLISH", body: plainEnglish, speechLanguage: "en-US"),
+                .init(title: "IPA", body: bodies[ipaMarker] ?? ""),
+                .init(title: "中文", body: bodies[chineseMarker] ?? "", speechLanguage: "zh-CN"),
+                .init(title: "GRAMMAR", body: bodies[grammarMarker] ?? "")
             ])
 
         case .chineseToEnglish:
@@ -111,5 +111,23 @@ enum TranslationPromptBuilder {
                 .init(title: "ENGLISH", body: englishSection.trimmingCharacters(in: .whitespacesAndNewlines), speechLanguage: "en-US")
             ])
         }
+    }
+
+    /// Splits `text` at each marker's first occurrence, in whatever order the
+    /// markers appear. Keys are the markers; "" holds any text before the
+    /// first marker.
+    private static func splitSections(_ text: String, markers: [String]) -> [String: String] {
+        let found = markers
+            .compactMap { marker in text.range(of: marker, options: .caseInsensitive).map { (marker, $0) } }
+            .sorted { $0.1.lowerBound < $1.1.lowerBound }
+
+        var bodies: [String: String] = [:]
+        let leadingEnd = found.first?.1.lowerBound ?? text.endIndex
+        bodies[""] = String(text[text.startIndex..<leadingEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
+        for (index, (marker, range)) in found.enumerated() {
+            let end = index + 1 < found.count ? found[index + 1].1.lowerBound : text.endIndex
+            bodies[marker] = String(text[range.upperBound..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return bodies
     }
 }

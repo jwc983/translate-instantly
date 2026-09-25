@@ -8,6 +8,9 @@ enum TranslationPromptBuilderTests {
         chinesePromptDoesNotRequestIPA()
         englishParserKeepsWorkingWhenProviderOmitsIPA()
         readableSectionsHaveSpeechLanguages()
+        englishPromptRequestsSimpleGrammarExplanation()
+        chinesePromptDoesNotRequestGrammar()
+        englishParserHandlesSectionsOutOfOrder()
         print("TranslationPromptBuilder tests passed")
     }
 
@@ -41,12 +44,15 @@ enum TranslationPromptBuilderTests {
 
             CHINESE:
             你好，世界。
+
+            GRAMMAR:
+            • Greeting: "Hello, world." is a set phrase
             """,
             direction: .englishToChinese
         )
 
-        expect(result.sections.map(\.title) == ["PLAIN ENGLISH", "IPA", "中文"], "Section titles should be ordered")
-        expect(result.sections.map(\.body) == ["Hello, world.", "/həˈloʊ wɝld/", "你好，世界。"], "Section bodies should parse correctly")
+        expect(result.sections.map(\.title) == ["PLAIN ENGLISH", "IPA", "中文", "GRAMMAR"], "Section titles should be ordered")
+        expect(result.sections.map(\.body) == ["Hello, world.", "/həˈloʊ wɝld/", "你好，世界。", "• Greeting: \"Hello, world.\" is a set phrase"], "Section bodies should parse correctly")
     }
 
     private static func chinesePromptDoesNotRequestIPA() {
@@ -70,7 +76,7 @@ enum TranslationPromptBuilderTests {
             direction: .englishToChinese
         )
 
-        expect(result.sections.map(\.body) == ["Hello.", "", "你好。"], "Missing IPA should not break translation parsing")
+        expect(result.sections.map(\.body) == ["Hello.", "", "你好。", ""], "Missing IPA and grammar should not break translation parsing")
     }
 
     private static func readableSectionsHaveSpeechLanguages() {
@@ -78,9 +84,32 @@ enum TranslationPromptBuilderTests {
             "PLAIN ENGLISH:\nHi.\nIPA:\n/haɪ/\nCHINESE:\n你好。",
             direction: .englishToChinese
         )
-        expect(english.sections.map(\.speechLanguage) == ["en-US", nil, "zh-CN"], "Plain English and Chinese should be readable aloud, IPA should not")
+        expect(english.sections.map(\.speechLanguage) == ["en-US", nil, "zh-CN", nil], "Plain English and Chinese should be readable aloud, IPA and grammar should not")
 
         let chinese = TranslationPromptBuilder.parse("ENGLISH:\nHello.", direction: .chineseToEnglish)
         expect(chinese.sections.first?.speechLanguage == "en-US", "English translation should be read in English")
+    }
+
+    private static func englishPromptRequestsSimpleGrammarExplanation() {
+        let prompt = TranslationPromptBuilder.prompt(for: "I have lived here for years.", direction: .englishToChinese)
+
+        expect(prompt.contains("GRAMMAR:"), "English prompt should contain the grammar marker")
+        expect(prompt.contains("simply"), "Grammar explanation should be requested in simple terms")
+        expect(prompt.contains("in plain, simple English. Use 2 to 4"), "Grammar explanation should be requested in English")
+    }
+
+    private static func chinesePromptDoesNotRequestGrammar() {
+        let prompt = TranslationPromptBuilder.prompt(for: "你好", direction: .chineseToEnglish)
+
+        expect(!prompt.contains("GRAMMAR:"), "Chinese selections should not request grammar")
+    }
+
+    private static func englishParserHandlesSectionsOutOfOrder() {
+        let result = TranslationPromptBuilder.parse(
+            "PLAIN ENGLISH:\nHi.\nGRAMMAR:\n• Greeting\nIPA:\n/haɪ/\nCHINESE:\n你好。",
+            direction: .englishToChinese
+        )
+
+        expect(result.sections.map(\.body) == ["Hi.", "/haɪ/", "你好。", "• Greeting"], "Sections should parse regardless of the order the model uses")
     }
 }

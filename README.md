@@ -39,7 +39,8 @@ Chinese using Gemini or DeepSeek.
 2. Press **⌥⇧T** (Option+Shift+T).
 3. A popup appears near your cursor:
    - English selection → a plain-English rewrite, a General American IPA
-     transcription of the original text, and its Simplified Chinese translation.
+     transcription of the original text, its Simplified Chinese translation, and
+     a short grammar explanation in simple English of the key structures used.
    - Chinese selection → its English translation.
    - Click **▶ Play** next to a section title (including your selected text)
      to hear it read aloud (click **■ Stop** to stop). For the most natural voice, download a Premium or
