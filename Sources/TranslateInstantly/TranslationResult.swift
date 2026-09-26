@@ -58,7 +58,7 @@ enum TranslationPromptBuilder {
     A natural Simplified Chinese translation of the original text.
 
     \(grammarMarker)
-    Explain the key grammar of the original text simply, for an English learner, in plain, simple English. Use 2 to 4 short bullet points, each starting with "• ". Name each grammar point (for example present perfect or relative clause) and quote the words it applies to. Skip anything too basic to be worth noting. If the text is a single word, give its part of speech and one common usage instead.
+    Explain the key grammar of the original text simply, for an English learner, in plain, simple English. Write 2 to 4 bullet points, one per line, each in the form "• Grammar point: short explanation", for example "• Present perfect: "have lived" shows an action that started in the past and is still true." Keep each explanation under 25 words and quote the words it applies to. Do not use Markdown or blank lines. Skip anything too basic to be worth noting. If the text is a single word, give its part of speech and one common usage instead.
     """
 
     private static let chineseToEnglishInstructions = """
@@ -99,7 +99,7 @@ enum TranslationPromptBuilder {
                 .init(title: "PLAIN ENGLISH", body: plainEnglish, speechLanguage: "en-US"),
                 .init(title: "IPA", body: bodies[ipaMarker] ?? ""),
                 .init(title: "中文", body: bodies[chineseMarker] ?? "", speechLanguage: "zh-CN"),
-                .init(title: "GRAMMAR", body: bodies[grammarMarker] ?? "")
+                .init(title: "GRAMMAR", body: normalizeBulletList(bodies[grammarMarker] ?? ""))
             ])
 
         case .chineseToEnglish:
@@ -129,5 +129,29 @@ enum TranslationPromptBuilder {
             bodies[marker] = String(text[range.upperBound..<end]).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return bodies
+    }
+
+    /// Models don't always stick to the requested bullet format, so this
+    /// turns "-", "*" and numbered items into "• " lines, strips Markdown
+    /// emphasis, drops blank lines, and joins wrapped lines onto their bullet.
+    static func normalizeBulletList(_ body: String) -> String {
+        var items: [String] = []
+        for rawLine in body.components(separatedBy: .newlines) {
+            var line = rawLine
+                .replacingOccurrences(of: "**", with: "")
+                .replacingOccurrences(of: "__", with: "")
+                .trimmingCharacters(in: .whitespaces)
+            guard !line.isEmpty else { continue }
+
+            if let markerRange = line.range(of: #"^([•\-*·]|\d+[.)])\s*"#, options: .regularExpression) {
+                line.removeSubrange(markerRange)
+                items.append("• " + line)
+            } else if let last = items.last, last.hasPrefix("• ") {
+                items[items.count - 1] = last + " " + line
+            } else {
+                items.append(line)
+            }
+        }
+        return items.joined(separator: "\n")
     }
 }

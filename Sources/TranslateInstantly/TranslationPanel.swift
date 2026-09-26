@@ -25,8 +25,8 @@ final class TranslationPanel: NSObject, NSTextViewDelegate, NSWindowDelegate {
         closeExisting()
         self.originalText = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let width: CGFloat = 380
-        let height: CGFloat = 240
+        let width: CGFloat = 420
+        let height: CGFloat = 340
         let mouseLocation = NSEvent.mouseLocation
         let screenFrame = NSScreen.screens.first(where: { $0.frame.contains(mouseLocation) })?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
 
@@ -86,7 +86,7 @@ final class TranslationPanel: NSObject, NSTextViewDelegate, NSWindowDelegate {
                 output.append(NSAttributedString(string: label, attributes: [.font: headerFont, .link: link]))
             }
             output.append(NSAttributedString(string: "\n"))
-            output.append(NSAttributedString(string: section.body, attributes: [.font: bodyFont]))
+            output.append(formattedBody(section.body, font: bodyFont))
         }
 
         if output.length == 0 {
@@ -94,6 +94,36 @@ final class TranslationPanel: NSObject, NSTextViewDelegate, NSWindowDelegate {
         }
 
         textView.textStorage?.setAttributedString(output)
+    }
+
+    /// Lays out "• " lines as a hanging-indent list so wrapped text lines up
+    /// under the item instead of the bullet, and bolds a leading
+    /// "Label:" so each grammar point is easy to scan.
+    private func formattedBody(_ body: String, font: NSFont) -> NSAttributedString {
+        let bullet = "• "
+        guard body.hasPrefix(bullet) else {
+            return NSAttributedString(string: body, attributes: [.font: font])
+        }
+
+        let boldFont = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.headIndent = (bullet as NSString).size(withAttributes: [.font: font]).width
+        paragraph.paragraphSpacing = 6
+
+        let output = NSMutableAttributedString()
+        let lines = body.components(separatedBy: "\n")
+        for (index, line) in lines.enumerated() {
+            let text = line + (index < lines.count - 1 ? "\n" : "")
+            let item = NSMutableAttributedString(string: text, attributes: [.font: font, .paragraphStyle: paragraph])
+            if line.hasPrefix(bullet), let colon = line.range(of: ":"),
+               // A colon far into the line is part of the explanation, not a label.
+               line.distance(from: line.startIndex, to: colon.lowerBound) <= 40 {
+                let labelStart = line.index(line.startIndex, offsetBy: bullet.count)
+                item.addAttribute(.font, value: boldFont, range: NSRange(labelStart..<colon.lowerBound, in: line))
+            }
+            output.append(item)
+        }
+        return output
     }
 
     func showError(_ message: String) {

@@ -11,6 +11,7 @@ enum TranslationPromptBuilderTests {
         englishPromptRequestsSimpleGrammarExplanation()
         chinesePromptDoesNotRequestGrammar()
         englishParserHandlesSectionsOutOfOrder()
+        grammarBulletsAreNormalized()
         print("TranslationPromptBuilder tests passed")
     }
 
@@ -95,7 +96,7 @@ enum TranslationPromptBuilderTests {
 
         expect(prompt.contains("GRAMMAR:"), "English prompt should contain the grammar marker")
         expect(prompt.contains("simply"), "Grammar explanation should be requested in simple terms")
-        expect(prompt.contains("in plain, simple English. Use 2 to 4"), "Grammar explanation should be requested in English")
+        expect(prompt.contains("in plain, simple English. Write 2 to 4"), "Grammar explanation should be requested in English")
     }
 
     private static func chinesePromptDoesNotRequestGrammar() {
@@ -111,5 +112,21 @@ enum TranslationPromptBuilderTests {
         )
 
         expect(result.sections.map(\.body) == ["Hi.", "/haɪ/", "你好。", "• Greeting"], "Sections should parse regardless of the order the model uses")
+    }
+
+    private static func grammarBulletsAreNormalized() {
+        let body = TranslationPromptBuilder.normalizeBulletList(
+            """
+            - **Present perfect**: "have lived" shows
+              an action that is still true.
+
+            2. Preposition: "for" gives a length of time.
+            """
+        )
+
+        expect(
+            body == "• Present perfect: \"have lived\" shows an action that is still true.\n• Preposition: \"for\" gives a length of time.",
+            "Bullets should be unified, unwrapped, and stripped of Markdown"
+        )
     }
 }
