@@ -42,6 +42,14 @@ enum ClipboardHelper {
             return nil
         }
 
+        // WebKit's AXSelectedText can be shifted by a character in editable
+        // web content (it drops the first letter and adds the one after the
+        // selection), so let the browser's own Copy handle web pages.
+        if isInsideWebArea(focusedElementRef as! AXUIElement) {
+            DebugLog.log("focused element is web content; using Copy instead of AX")
+            return nil
+        }
+
         // Some applications expose AXSelectedText on a container rather than
         // the leaf that macOS reports as focused. Walk toward the application
         // before falling back to a synthetic Copy command.
@@ -61,6 +69,23 @@ enum ClipboardHelper {
 
         DebugLog.log("AX selected text unavailable for \(frontmost.bundleIdentifier ?? "unknown")")
         return nil
+    }
+
+    private static func isInsideWebArea(_ start: AXUIElement) -> Bool {
+        var element = start
+        for _ in 0..<32 {
+            var roleRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef) == .success,
+               roleRef as? String == "AXWebArea" {
+                return true
+            }
+
+            var parentRef: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &parentRef) == .success,
+                  let parentRef else { return false }
+            element = parentRef as! AXUIElement
+        }
+        return false
     }
 
     private static func captureViaCopyKeystroke(completion: @escaping (String?) -> Void) {
