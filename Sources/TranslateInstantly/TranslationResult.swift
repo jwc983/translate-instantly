@@ -51,7 +51,7 @@ enum TranslationPromptBuilder {
     Rewrite the text in plain, simple English: easy vocabulary, short sentences, same meaning.
 
     \(chineseMarker)
-    In Simplified Chinese, first give a natural translation of the original text, then explain it in detail: what it means and its context, the nuance of key words and phrases, and any idioms or implied meaning a Chinese reader might miss. Write the explanation as plain paragraphs, with no Markdown.
+    A natural Simplified Chinese translation of the original text. Give only the translation, with no explanation.
 
     \(grammarMarker)
     Explain the key grammar of the original text simply, for an English learner, in plain, simple English. Write 2 to 4 bullet points, one per line, each in the form "• Grammar point: short explanation", for example "• Present perfect: "have lived" shows an action that started in the past and is still true." Keep each explanation under 25 words and quote the words it applies to. Do not use Markdown or blank lines. Skip anything too basic to be worth noting. If the text is a single word, give its part of speech and one common usage instead.

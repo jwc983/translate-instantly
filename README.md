@@ -31,9 +31,9 @@ Chinese using DeepSeek.
 1. Select any English or Chinese text in any app.
 2. Press **⌥⇧T** (Option+Shift+T).
 3. A popup appears near your cursor:
-   - English selection → a plain-English rewrite, a Simplified Chinese
-     translation with a detailed explanation in Chinese, and a short grammar
-     explanation in simple English of the key structures used.
+   - English selection → a plain-English rewrite, its Simplified Chinese
+     translation, and a short grammar explanation in simple English of the key
+     structures used.
    - Chinese selection → its English translation.
    - Click **▶ Play** next to a section title to hear it read aloud (click **■ Stop** to stop). For the most natural voice, download a Premium or
      Enhanced voice in System Settings › Accessibility › Spoken Content.
