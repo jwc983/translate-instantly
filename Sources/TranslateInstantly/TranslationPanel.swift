@@ -8,9 +8,7 @@ final class TranslationPanel: NSObject, NSTextViewDelegate, NSWindowDelegate {
     private var panel: NSPanel?
     private var textView: NSTextView?
     private var result: TranslationResult?
-    private var originalText = ""
-    /// What's currently on screen: the user's selection followed by the
-    /// translation sections. Play links refer to indices in this array.
+    /// What's currently on screen. Play links refer to indices in this array.
     private var displayedSections: [TranslationResult.Section] = []
 
     private override init() {
@@ -21,9 +19,8 @@ final class TranslationPanel: NSObject, NSTextViewDelegate, NSWindowDelegate {
         }
     }
 
-    func show(loadingFor originalText: String = "") {
+    func show() {
         closeExisting()
-        self.originalText = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let width: CGFloat = 420
         let height: CGFloat = 340
@@ -68,7 +65,7 @@ final class TranslationPanel: NSObject, NSTextViewDelegate, NSWindowDelegate {
     func update(with result: TranslationResult) {
         guard let textView = textView else { return }
         self.result = result
-        displayedSections = [selectedTextSection()].compactMap { $0 } + result.sections
+        displayedSections = result.sections
 
         let headerFont = NSFont.boldSystemFont(ofSize: 12)
         let headerColor = NSColor.secondaryLabelColor
@@ -140,19 +137,12 @@ final class TranslationPanel: NSObject, NSTextViewDelegate, NSWindowDelegate {
         return true
     }
 
-    private func selectedTextSection() -> TranslationResult.Section? {
-        guard !originalText.isEmpty else { return nil }
-        let language = LanguageDetector.direction(for: originalText) == .englishToChinese ? "en-US" : "zh-CN"
-        return .init(title: "SELECTED TEXT", body: originalText, speechLanguage: language)
-    }
-
     func windowWillClose(_ notification: Notification) {
         SpeechPlayer.shared.stop()
     }
 
     private func closeExisting() {
         result = nil
-        originalText = ""
         displayedSections = []
         panel?.close()
         panel = nil

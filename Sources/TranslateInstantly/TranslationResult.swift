@@ -39,23 +39,19 @@ enum LanguageDetector {
 
 enum TranslationPromptBuilder {
     private static let plainEnglishMarker = "PLAIN ENGLISH:"
-    private static let ipaMarker = "IPA:"
     private static let chineseMarker = "CHINESE:"
     private static let grammarMarker = "GRAMMAR:"
     private static let englishMarker = "ENGLISH:"
 
     private static let englishToChineseInstructions = """
     You are a translation assistant. The user selected a piece of English text.
-    Respond with exactly four labeled sections, in this order, and nothing else:
+    Respond with exactly three labeled sections, in this order, and nothing else:
 
     \(plainEnglishMarker)
     Rewrite the text in plain, simple English: easy vocabulary, short sentences, same meaning.
 
-    \(ipaMarker)
-    Transcribe the original English text in International Phonetic Alphabet (IPA). Use a natural General American pronunciation, put the transcription between slashes, and preserve sentence boundaries. Do not explain the transcription.
-
     \(chineseMarker)
-    A natural Simplified Chinese translation of the original text.
+    In Simplified Chinese, first give a natural translation of the original text, then explain it in detail: what it means and its context, the nuance of key words and phrases, and any idioms or implied meaning a Chinese reader might miss. Write the explanation as plain paragraphs, with no Markdown.
 
     \(grammarMarker)
     Explain the key grammar of the original text simply, for an English learner, in plain, simple English. Write 2 to 4 bullet points, one per line, each in the form "• Grammar point: short explanation", for example "• Present perfect: "have lived" shows an action that started in the past and is still true." Keep each explanation under 25 words and quote the words it applies to. Do not use Markdown or blank lines. Skip anything too basic to be worth noting. If the text is a single word, give its part of speech and one common usage instead.
@@ -90,14 +86,13 @@ enum TranslationPromptBuilder {
                 return TranslationResult(sections: [.init(title: "中文", body: trimmed, speechLanguage: "zh-CN")])
             }
 
-            let bodies = splitSections(trimmed, markers: [plainEnglishMarker, ipaMarker, chineseMarker, grammarMarker])
+            let bodies = splitSections(trimmed, markers: [plainEnglishMarker, chineseMarker, grammarMarker])
             // Text before the first marker is treated as the plain-English
             // rewrite when the model leaves off its label.
             let plainEnglish = bodies[plainEnglishMarker] ?? bodies[""] ?? ""
 
             return TranslationResult(sections: [
                 .init(title: "PLAIN ENGLISH", body: plainEnglish, speechLanguage: "en-US"),
-                .init(title: "IPA", body: bodies[ipaMarker] ?? ""),
                 .init(title: "中文", body: bodies[chineseMarker] ?? "", speechLanguage: "zh-CN"),
                 .init(title: "GRAMMAR", body: normalizeBulletList(bodies[grammarMarker] ?? ""))
             ])

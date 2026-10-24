@@ -78,12 +78,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ClipboardHelper.captureSelectedText { text in
             DebugLog.log("captured text = \(text ?? "nil")")
             guard let text = text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                TranslationPanel.shared.show(loadingFor: "")
+                TranslationPanel.shared.show()
                 TranslationPanel.shared.showError("No text captured. Make sure text is selected, then try again.")
                 return
             }
 
-            TranslationPanel.shared.show(loadingFor: text)
+            TranslationPanel.shared.show()
 
             let handleResult: (Result<TranslationResult, Error>) -> Void = { result in
                 DispatchQueue.main.async {
