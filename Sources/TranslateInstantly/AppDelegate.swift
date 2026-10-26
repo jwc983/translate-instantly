@@ -16,6 +16,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         DebugLog.log("applicationDidFinishLaunching")
+        if #available(macOS 10.15, *) {
+            DebugLog.log("permissions: axTrusted=\(AXIsProcessTrusted()) postEventAccess=\(CGPreflightPostEventAccess())")
+        } else {
+            DebugLog.log("permissions: axTrusted=\(AXIsProcessTrusted())")
+        }
         requestAccessibilityPermissionIfNeeded()
         setupStatusItem()
         setupHotKey()
@@ -46,9 +51,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         menu.addItem(withTitle: "Set DeepSeek API Key…", action: #selector(setDeepSeekAPIKey), keyEquivalent: "")
         menu.addItem(.separator())
-        let hotkeyItem = NSMenuItem(title: "Hotkey: ⌥⇧T", action: nil, keyEquivalent: "")
+        let hotkeyItem = NSMenuItem(title: "Translate selection: ⌥⇧T", action: nil, keyEquivalent: "")
         hotkeyItem.isEnabled = false
         menu.addItem(hotkeyItem)
+        let clipboardItem = NSMenuItem(title: "Translate clipboard: ⌥⇧C", action: nil, keyEquivalent: "")
+        clipboardItem.isEnabled = false
+        menu.addItem(clipboardItem)
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit", action: #selector(quit), keyEquivalent: "q")
         for menuItem in menu.items { menuItem.target = self }
@@ -61,42 +69,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         HotKeyManager.shared.onHotKey = { [weak self] in
             self?.translateSelection()
         }
+        HotKeyManager.shared.onClipboardHotKey = { [weak self] in
+            self?.translateClipboard()
+        }
         HotKeyManager.shared.registerDefault()
     }
 
     private func translateSelection() {
         DebugLog.log("translateSelection triggered, AXIsProcessTrusted=\(AXIsProcessTrusted())")
-        guard let apiKey = APIKeyStore.load(), !apiKey.isEmpty else {
-            DebugLog.log("no DeepSeek API key set")
-            let alert = NSAlert()
-            alert.messageText = "DeepSeek API Key Required"
-            alert.informativeText = "Set your DeepSeek API key from the menu bar icon first."
-            alert.runModal()
-            return
-        }
+        guard let apiKey = loadAPIKey() else { return }
 
         ClipboardHelper.captureSelectedText { text in
             DebugLog.log("captured text = \(text ?? "nil")")
             guard let text = text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 TranslationPanel.shared.show()
-                TranslationPanel.shared.showError("No text captured. Make sure text is selected, then try again.")
+                let frontmostID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                let inTerminal = frontmostID == "com.apple.Terminal" || frontmostID?.contains("iterm") == true
+                TranslationPanel.shared.showError(inTerminal
+                    ? "No text captured. Terminals don't expose TUI selections — copy the text, then press ⌥⇧C."
+                    : "No text captured. Make sure text is selected, then try again.")
                 return
             }
 
-            TranslationPanel.shared.show()
+            self.translate(text, apiKey: apiKey)
+        }
+    }
 
-            let handleResult: (Result<TranslationResult, Error>) -> Void = { result in
-                DispatchQueue.main.async {
-                    switch result {
-                    case .success(let translation):
-                        TranslationPanel.shared.update(with: translation)
-                    case .failure(let error):
-                        TranslationPanel.shared.showError(error.localizedDescription)
-                    }
+    private func translateClipboard() {
+        DebugLog.log("translateClipboard triggered")
+        guard let apiKey = loadAPIKey() else { return }
+
+        let text = NSPasteboard.general.string(forType: .string)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let text, !text.isEmpty else {
+            TranslationPanel.shared.show()
+            TranslationPanel.shared.showError("Clipboard is empty. Copy some text first, then press ⌥⇧C.")
+            return
+        }
+
+        DebugLog.log("translating clipboard text (\(text.count) chars)")
+        translate(text, apiKey: apiKey)
+    }
+
+    private func loadAPIKey() -> String? {
+        guard let apiKey = APIKeyStore.load(), !apiKey.isEmpty else {
+            DebugLog.log("no DeepSeek API key set")
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.messageText = "DeepSeek API Key Required"
+            alert.informativeText = "Set your DeepSeek API key from the menu bar icon first."
+            alert.runModal()
+            return nil
+        }
+        return apiKey
+    }
+
+    private func translate(_ text: String, apiKey: String) {
+        TranslationPanel.shared.show()
+
+        DeepSeekClient.translate(text, apiKey: apiKey) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let translation):
+                    TranslationPanel.shared.update(with: translation)
+                case .failure(let error):
+                    TranslationPanel.shared.showError(error.localizedDescription)
                 }
             }
-
-            DeepSeekClient.translate(text, apiKey: apiKey, completion: handleResult)
         }
     }
 

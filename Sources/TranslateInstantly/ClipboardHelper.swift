@@ -4,10 +4,37 @@ import Carbon.HIToolbox
 
 enum ClipboardHelper {
     private static let hotKeyReleasePollInterval: TimeInterval = 0.025
-    private static let copySettleDelay: TimeInterval = 0.075
+    private static let copySettleDelay: TimeInterval = 0.2
+    // A TUI repaint is not competing with a hotkey chord the way an AppKit text
+    // field is, so the injected copy can land as soon as the modifiers are up.
+    private static let terminalCopySettleDelay: TimeInterval = 0.02
     private static let pasteboardPollInterval: TimeInterval = 0.025
-    private static let pasteboardPollAttempts = 60
+    private static let pasteboardPollAttempts = 200
     private static let copyAttempts = 2
+
+    // Terminal emulators redraw their buffer constantly (TTY apps like Claude
+    // Code, vim, or anything animating). During a repaint the AX tree can
+    // briefly report no focused element or no AXSelectedText, so a single read
+    // is unreliable and the resulting nil used to fall through to Cmd+C.
+    private static let axReadAttempts = 20
+    private static let axRetryInterval: TimeInterval = 0.025
+
+    // Terminal emulators expose their line buffer as a plain AXTextArea whose
+    // AXSelectedText is always empty, so the AX path cannot see a mouse
+    // selection made over a full-screen TUI (Claude Code, vim, less, ...).
+    // Those selections live only in the emulator's own selection state and are
+    // reachable solely through its native Copy command, so terminals go
+    // straight to Cmd+C instead of wasting time on AX retries.
+    private static let terminalBundleIdentifiers: Set<String> = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "dev.warp.Warp-Stable",
+        "dev.warp.Warp",
+        "net.kovidgoyal.kitty",
+        "com.github.wez.wezterm",
+        "com.mitchellh.ghostty",
+        "io.alacritty",
+    ]
 
     // Guards against overlapping captures: if the hotkey is pressed again while
     // a previous capture is still polling, two concurrent calls would race on
@@ -15,19 +42,38 @@ enum ClipboardHelper {
     private static var isCapturing = false
 
     static func captureSelectedText(completion: @escaping (String?) -> Void) {
-        // Prefer reading the selection straight from the Accessibility API: no
-        // clipboard involved, no synthetic keystroke to race against real
-        // hardware modifier state. Terminal.app in particular treats the
-        // synthetic Cmd+C from the fallback path below as unreliable (its
-        // AXSelectedText support is solid, but CGEvent-injected keystrokes
-        // often lose the race against the still-being-released hotkey chord).
+        let frontmostBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let isTerminal = frontmostBundleID.map(terminalBundleIdentifiers.contains) ?? false
+
+        // Terminals never answer the AX path for a TUI selection, so skip
+        // straight to their native Copy instead of burning ~500 ms on retries.
+        if isTerminal {
+            DebugLog.log("terminal \(frontmostBundleID ?? "unknown"); using Copy")
+            captureViaCopyKeystroke(settleDelay: terminalCopySettleDelay, completion: completion)
+            return
+        }
+
+        // Everywhere else, prefer reading the selection straight from the
+        // Accessibility API: no clipboard involved, no synthetic keystroke to
+        // race against real hardware modifier state.
+        captureViaAccessibility(attemptsRemaining: axReadAttempts, completion: completion)
+    }
+
+    private static func captureViaAccessibility(attemptsRemaining: Int, completion: @escaping (String?) -> Void) {
         if let axText = selectedTextViaAccessibility(), !axText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             DebugLog.log("captured via Accessibility API")
             completion(axText)
             return
         }
 
-        captureViaCopyKeystroke(completion: completion)
+        if attemptsRemaining > 1 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + axRetryInterval) {
+                captureViaAccessibility(attemptsRemaining: attemptsRemaining - 1, completion: completion)
+            }
+            return
+        }
+
+        captureViaCopyKeystroke(settleDelay: copySettleDelay, completion: completion)
     }
 
     private static func selectedTextViaAccessibility() -> String? {
@@ -88,7 +134,7 @@ enum ClipboardHelper {
         return false
     }
 
-    private static func captureViaCopyKeystroke(completion: @escaping (String?) -> Void) {
+    private static func captureViaCopyKeystroke(settleDelay: TimeInterval, completion: @escaping (String?) -> Void) {
         guard !isCapturing else {
             DebugLog.log("captureSelectedText ignored: capture already in progress")
             completion(nil)
@@ -110,10 +156,11 @@ enum ClipboardHelper {
         waitForHotKeyRelease(attemptsRemaining: 40) {
             // Carbon reports the hotkey on key-down. Give the source app a
             // moment to process every matching key-up before injecting Cmd+C.
-            DispatchQueue.main.asyncAfter(deadline: .now() + copySettleDelay) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + settleDelay) {
                 attemptCopy(
                     pasteboard,
                     previousItems: previousItems,
+                    settleDelay: settleDelay,
                     attemptsRemaining: copyAttempts,
                     completion: completion
                 )
@@ -124,6 +171,7 @@ enum ClipboardHelper {
     private static func attemptCopy(
         _ pasteboard: NSPasteboard,
         previousItems: [[(NSPasteboard.PasteboardType, Data)]],
+        settleDelay: TimeInterval,
         attemptsRemaining: Int,
         completion: @escaping (String?) -> Void
     ) {
@@ -159,10 +207,11 @@ enum ClipboardHelper {
             }
 
             DebugLog.log("copy attempt failed; retrying")
-            DispatchQueue.main.asyncAfter(deadline: .now() + copySettleDelay) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + settleDelay) {
                 attemptCopy(
                     pasteboard,
                     previousItems: previousItems,
+                    settleDelay: settleDelay,
                     attemptsRemaining: attemptsRemaining - 1,
                     completion: completion
                 )
@@ -228,13 +277,23 @@ enum ClipboardHelper {
     }
 
     private static func simulateCopyKeystroke() {
+        // Synthetic input needs kTCCServicePostEvent (separate from the AX read
+        // grant). Without it post() silently no-ops, which looks identical to
+        // "the app ignored Cmd+C", so log the permission state for diagnosis.
+        if #available(macOS 10.15, *) {
+            DebugLog.log("postEventAccess=\(CGPreflightPostEventAccess()) axTrusted=\(AXIsProcessTrusted())")
+        }
+
         let source = CGEventSource(stateID: .combinedSessionState)
 
         guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: true),
               let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: false) else { return }
         keyDown.flags = .maskCommand
         keyUp.flags = .maskCommand
-        keyDown.post(tap: .cghidEventTap)
-        keyUp.post(tap: .cghidEventTap)
+        // .cgAnnotatedSessionEventTap reaches the focused app through the same
+        // path as real HID keystrokes; .cghidEventTap is sometimes filtered in
+        // terminal emulators that already have an event tap installed.
+        keyDown.post(tap: .cgAnnotatedSessionEventTap)
+        keyUp.post(tap: .cgAnnotatedSessionEventTap)
     }
 }

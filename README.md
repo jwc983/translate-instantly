@@ -30,6 +30,12 @@ Chinese using DeepSeek.
 
 1. Select any English or Chinese text in any app.
 2. Press **⌥⇧T** (Option+Shift+T).
+
+Alternatively, copy the text (**⌘C**), then press **⌥⇧C** to translate whatever is
+on the clipboard. This is the reliable route inside terminals running
+full-screen TUI apps (Claude Code, vim, less, …), whose mouse selections are not
+exposed to the Accessibility API and ignore synthetic copy keystrokes.
+
 3. A popup appears near your cursor:
    - English selection → a plain-English rewrite, its Simplified Chinese
      translation, and a short grammar explanation in simple English of the key
