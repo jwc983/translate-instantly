@@ -41,17 +41,21 @@ enum TranslationPromptBuilder {
     private static let plainEnglishMarker = "PLAIN ENGLISH:"
     private static let chineseMarker = "CHINESE:"
     private static let grammarMarker = "GRAMMAR:"
+    private static let abbreviationsMarker = "ABBREVIATIONS:"
     private static let englishMarker = "ENGLISH:"
 
     private static let englishToChineseInstructions = """
     You are a translation assistant. The user selected a piece of English text.
-    Respond with exactly three labeled sections, in this order, and nothing else:
+    Respond with exactly four labeled sections, in this order, and nothing else:
 
     \(plainEnglishMarker)
     Rewrite the text in plain, simple English: easy vocabulary, short sentences, same meaning.
 
     \(chineseMarker)
     A natural Simplified Chinese translation of the original text. Give only the translation, with no explanation.
+
+    \(abbreviationsMarker)
+    Explain every abbreviation, acronym, initialism and short form in the original text (for example "ASAP", "e.g.", "API", "FYI", "Dr."). Write one bullet per abbreviation, one per line, in the form "• ABBR: full form (Simplified Chinese meaning) - short explanation in plain, simple English", for example "• ASAP: as soon as possible (尽快) - used to ask for something to be done quickly." Keep each explanation under 20 words. Do not use Markdown or blank lines. If the text has no abbreviations, write only "None".
 
     \(grammarMarker)
     Explain the key grammar of the original text simply, for an English learner, in plain, simple English. Write 2 to 4 bullet points, one per line, each in the form "• Grammar point: short explanation", for example "• Present perfect: "have lived" shows an action that started in the past and is still true." Keep each explanation under 25 words and quote the words it applies to. Do not use Markdown or blank lines. Skip anything too basic to be worth noting. If the text is a single word, give its part of speech and one common usage instead.
@@ -86,7 +90,7 @@ enum TranslationPromptBuilder {
                 return TranslationResult(sections: [.init(title: "中文", body: trimmed, speechLanguage: "zh-CN")])
             }
 
-            let bodies = splitSections(trimmed, markers: [plainEnglishMarker, chineseMarker, grammarMarker])
+            let bodies = splitSections(trimmed, markers: [plainEnglishMarker, chineseMarker, abbreviationsMarker, grammarMarker])
             // Text before the first marker is treated as the plain-English
             // rewrite when the model leaves off its label.
             let plainEnglish = bodies[plainEnglishMarker] ?? bodies[""] ?? ""
@@ -94,6 +98,7 @@ enum TranslationPromptBuilder {
             return TranslationResult(sections: [
                 .init(title: "PLAIN ENGLISH", body: plainEnglish, speechLanguage: "en-US"),
                 .init(title: "中文", body: bodies[chineseMarker] ?? "", speechLanguage: "zh-CN"),
+                .init(title: "ABBREVIATIONS", body: abbreviationsBody(bodies[abbreviationsMarker] ?? "")),
                 .init(title: "GRAMMAR", body: normalizeBulletList(bodies[grammarMarker] ?? ""))
             ])
 
@@ -106,6 +111,16 @@ enum TranslationPromptBuilder {
                 .init(title: "ENGLISH", body: englishSection.trimmingCharacters(in: .whitespacesAndNewlines), speechLanguage: "en-US")
             ])
         }
+    }
+
+    /// The model is told to write "None" when there are no abbreviations;
+    /// turning that into an empty body makes the panel hide the section.
+    private static func abbreviationsBody(_ body: String) -> String {
+        let cleaned = body.trimmingCharacters(in: CharacterSet(charactersIn: " .\n"))
+        if cleaned.isEmpty || cleaned.caseInsensitiveCompare("None") == .orderedSame {
+            return ""
+        }
+        return normalizeBulletList(body)
     }
 
     /// Splits `text` at each marker's first occurrence, in whatever order the
