@@ -43,6 +43,7 @@ enum TranslationPromptBuilder {
     private static let grammarMarker = "GRAMMAR:"
     private static let abbreviationsMarker = "ABBREVIATIONS:"
     private static let englishMarker = "ENGLISH:"
+    private static let explanationMarker = "EXPLANATION:"
 
     private static let englishToChineseInstructions = """
     You are a translation assistant. The user selected a piece of English text.
@@ -63,10 +64,13 @@ enum TranslationPromptBuilder {
 
     private static let chineseToEnglishInstructions = """
     You are a translation assistant. The user selected a piece of Chinese text.
-    Respond with exactly one labeled section, and nothing else:
+    Respond with exactly two labeled sections, in this order, and nothing else:
 
     \(englishMarker)
     A natural English translation of the original text.
+
+    \(explanationMarker)
+    Explain the meaning of the original text in plain, simple English, for an English speaker learning Chinese. Write 2 to 4 bullet points, one per line, each in the form "• Chinese words (pinyin): short explanation", for example "• 马马虎虎 (mǎmǎhūhū): an idiom meaning "so-so" or "careless"; word for word it is "horse horse tiger tiger"." Focus on idioms, set phrases, cultural references, and words whose meaning is not clear from the translation. Keep each explanation under 25 words. Do not use Markdown or blank lines. If the text is a single word, give its part of speech and one common usage instead.
     """
 
     static func direction(for text: String) -> TranslationDirection {
@@ -103,12 +107,13 @@ enum TranslationPromptBuilder {
             ])
 
         case .chineseToEnglish:
-            var englishSection = trimmed
-            if let markerRange = trimmed.range(of: englishMarker, options: .caseInsensitive) {
-                englishSection = String(trimmed[markerRange.upperBound...])
-            }
+            let bodies = splitSections(trimmed, markers: [englishMarker, explanationMarker])
+            // Text before the first marker is treated as the translation
+            // when the model leaves off its label.
+            let english = bodies[englishMarker] ?? bodies[""] ?? ""
             return TranslationResult(sections: [
-                .init(title: "ENGLISH", body: englishSection.trimmingCharacters(in: .whitespacesAndNewlines), speechLanguage: "en-US")
+                .init(title: "ENGLISH", body: english, speechLanguage: "en-US"),
+                .init(title: "EXPLANATION", body: normalizeBulletList(bodies[explanationMarker] ?? ""))
             ])
         }
     }

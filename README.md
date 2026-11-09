@@ -40,7 +40,8 @@ exposed to the Accessibility API and ignore synthetic copy keystrokes.
    - English selection → a plain-English rewrite, its Simplified Chinese
      translation, and a short grammar explanation in simple English of the key
      structures used.
-   - Chinese selection → its English translation.
+   - Chinese selection → its English translation, and a short explanation in
+     simple English of idioms, set phrases and other words worth knowing (with pinyin).
    - Click **▶ Play** next to a section title to hear it read aloud (click **■ Stop** to stop). For the most natural voice, download a Premium or
      Enhanced voice in System Settings › Accessibility › Spoken Content.
 

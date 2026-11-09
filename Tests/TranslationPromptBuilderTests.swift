@@ -14,6 +14,9 @@ enum TranslationPromptBuilderTests {
         englishPromptRequestsAbbreviations()
         chinesePromptDoesNotRequestAbbreviations()
         abbreviationsNoneIsHidden()
+        chinesePromptRequestsEnglishExplanation()
+        chineseResponseParsesTranslationAndExplanation()
+        chineseParserKeepsWorkingWithoutMarkers()
         print("TranslationPromptBuilder tests passed")
     }
 
@@ -146,5 +149,38 @@ enum TranslationPromptBuilderTests {
             )
             expect(result.sections[2].body.isEmpty, "\"\(none)\" should become an empty, hidden abbreviations section")
         }
+    }
+
+    private static func chinesePromptRequestsEnglishExplanation() {
+        let prompt = TranslationPromptBuilder.prompt(for: "马马虎虎", direction: .chineseToEnglish)
+
+        expect(prompt.contains("EXPLANATION:"), "Chinese prompt should contain the explanation marker")
+        expect(prompt.contains("in plain, simple English"), "Explanation should be requested in simple English")
+    }
+
+    private static func chineseResponseParsesTranslationAndExplanation() {
+        let result = TranslationPromptBuilder.parse(
+            """
+            ENGLISH:
+            So-so.
+
+            EXPLANATION:
+            - **马马虎虎 (mǎmǎhūhū)**: an idiom meaning "so-so".
+            """,
+            direction: .chineseToEnglish
+        )
+
+        expect(result.sections.map(\.title) == ["ENGLISH", "EXPLANATION"], "Chinese sections should be ordered")
+        expect(
+            result.sections.map(\.body) == ["So-so.", "• 马马虎虎 (mǎmǎhūhū): an idiom meaning \"so-so\"."],
+            "Chinese section bodies should parse and bullets should be normalized"
+        )
+        expect(result.sections.map(\.speechLanguage) == ["en-US", nil], "Only the translation should be read aloud")
+    }
+
+    private static func chineseParserKeepsWorkingWithoutMarkers() {
+        let result = TranslationPromptBuilder.parse("Hello.", direction: .chineseToEnglish)
+
+        expect(result.sections.map(\.body) == ["Hello.", ""], "An unlabeled reply should be shown as the translation, with the explanation hidden")
     }
 }
